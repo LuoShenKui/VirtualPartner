@@ -1,0 +1,83 @@
+# Unity generated folders
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
+/MemoryCaptures/
+/UserSettings/
+
+# Unity generated files
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+
+# Unity crash reports
+/sysinfo.txt
+
+# IDE and OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+.idea/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Rider / JetBrains
+*.DotSettings.user
+
+# Visual Studio / VS Code caches
+.vs/
+.vscode/
+*.slnx
+
+# Unity package manager and local caches
+.upm/
+.utmp/
+*.tgz
+
+# Unity Asset Store assets not licensed for public redistribution
+/Assets/MinimalistBedroom/
+/Assets/MinimalistBedroom.meta
+/Assets/Kevin Iglesias/
+/Assets/Kevin Iglesias.meta
+
+# UniVRM is resolved through Unity Package Manager, not vendored
+/Packages/com.vrmc.gltf/
+/Packages/com.vrmc.gltf.meta
+/Packages/com.vrmc.vrm/
+/Packages/com.vrmc.vrm.meta
+
+# Builds and exported artifacts
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.ipa
+*.xcodeproj/
+
+# Local runtime data
+/ConversationLogs/
+/Recordings/
+/Screenshots/
+
+# Project-specific scratch
+Test/*
