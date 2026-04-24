@@ -173,7 +173,7 @@ namespace VRDemo.UI
             var width = Mathf.Min(680, Screen.width - 160);
             var rect = new Rect(22, 22, width, 74);
             GUILayout.BeginArea(rect, panelStyle);
-            GUILayout.Label(IsFemalePerspective ? "女主说" : "女主回应", titleStyle);
+            GUILayout.Label(IsFemalePerspective ? "男主回应" : "女主回应", titleStyle);
             GUILayout.Label(latestReply, replyStyle);
             GUILayout.Label(latestStatus, bodyStyle);
             GUILayout.EndArea();
@@ -231,7 +231,17 @@ namespace VRDemo.UI
 
             GUILayout.Label("Ollama 本地模型名", bodyStyle);
             settingsData.ollamaModelName = GUILayout.TextField(settingsData.ollamaModelName ?? string.Empty, inputStyle, GUILayout.Height(30));
-            GUILayout.Label("示例：qwen3.5:2b。Ollama 默认模型目录在 ~/.ollama/models。", bodyStyle);
+            GUILayout.Label("Mac 推荐：qwen3:4b；更轻：qwen3:1.7b；更好但更慢：qwen3:8b。Ollama 默认模型目录在 ~/.ollama/models。", bodyStyle);
+            GUILayout.Space(6);
+
+            GUILayout.Label("语音后端", bodyStyle);
+            settingsData.speechBackend = GUILayout.TextField(settingsData.speechBackend ?? string.Empty, inputStyle, GUILayout.Height(30));
+            GUILayout.Label("填写 cosyvoice。需要先启动本地 CosyVoice 服务，否则不播放语音。", bodyStyle);
+            GUILayout.Space(6);
+
+            GUILayout.Label("CosyVoice 服务地址", bodyStyle);
+            settingsData.cosyVoiceUrl = GUILayout.TextField(settingsData.cosyVoiceUrl ?? string.Empty, inputStyle, GUILayout.Height(30));
+            GUILayout.Label("默认：http://localhost:50000，模式默认 sft，女主 voice 可填 中文女。", bodyStyle);
             GUILayout.Space(6);
 
             GUILayout.Label("女主语音名称", bodyStyle);
@@ -278,6 +288,16 @@ namespace VRDemo.UI
         {
             if (isSending)
             {
+                return;
+            }
+
+            if (showSettings)
+            {
+                if (Input.GetKeyDown(KeyCode.F2))
+                {
+                    showSettings = false;
+                }
+
                 return;
             }
 
@@ -341,9 +361,13 @@ namespace VRDemo.UI
             var wasAutoSmallTalk = isAutoSmallTalk;
             var wasFemalePerspective = IsFemalePerspective;
             isAutoSmallTalk = false;
-            latestReply = wasAutoSmallTalk || wasFemalePerspective ? "女主正在组织语言..." : "她正在想怎么回应你...";
+            latestReply = wasFemalePerspective ? "男主正在回应..." : "她正在想怎么回应你...";
             latestStatus = "发送中...";
-            if (wasAutoSmallTalk || wasFemalePerspective)
+            if (wasFemalePerspective)
+            {
+                await dialogueSystem.SendFemalePerspectiveAsync(prompt);
+            }
+            else if (wasAutoSmallTalk)
             {
                 await dialogueSystem.SendProactiveAsync(prompt);
             }
@@ -379,9 +403,9 @@ namespace VRDemo.UI
             settingsData.partnerModelAssetPath = string.IsNullOrWhiteSpace(settingsData.partnerModelAssetPath)
                 ? "Assets/Resources/Models/Characters/partner.vrm"
                 : settingsData.partnerModelAssetPath.Trim();
-            settingsData.ollamaModelName = string.IsNullOrWhiteSpace(settingsData.ollamaModelName) ? "qwen3.5:2b" : settingsData.ollamaModelName.Trim();
+            settingsData.ollamaModelName = string.IsNullOrWhiteSpace(settingsData.ollamaModelName) ? "qwen3:4b" : settingsData.ollamaModelName.Trim();
             settingsData.systemPrompt = string.IsNullOrWhiteSpace(settingsData.systemPrompt)
-                ? "你正在驱动一个虚拟伴侣 Unity 原型。只输出女主对男主说的话和动作意图，不要输出旁白、思考过程或解释。"
+                ? "你正在驱动一个虚拟伴侣 Unity 原型。根据当前互动方向输出指定角色的台词和动作意图，不要输出旁白、思考过程或解释。"
                 : settingsData.systemPrompt.Trim();
             settingsData.playerPersona = string.IsNullOrWhiteSpace(settingsData.playerPersona)
                 ? "玩家扮演温柔、主动但尊重边界的男主，会通过说话和动作与女主互动。"
@@ -391,11 +415,14 @@ namespace VRDemo.UI
                 : settingsData.partnerPersona.Trim();
             settingsData.partnerVoiceName = settingsData.partnerVoiceName?.Trim() ?? string.Empty;
             settingsData.playerVoiceName = settingsData.playerVoiceName?.Trim() ?? string.Empty;
+            settingsData.speechBackend = string.IsNullOrWhiteSpace(settingsData.speechBackend) ? "cosyvoice" : settingsData.speechBackend.Trim();
+            settingsData.cosyVoiceUrl = string.IsNullOrWhiteSpace(settingsData.cosyVoiceUrl) ? "http://localhost:50000" : settingsData.cosyVoiceUrl.Trim().TrimEnd('/');
+            settingsData.cosyVoiceMode = string.IsNullOrWhiteSpace(settingsData.cosyVoiceMode) ? "sft" : settingsData.cosyVoiceMode.Trim();
 
             CompanionUserSettings.Save(settingsData);
             FindAnyObjectByType<DialogueSystem>()?.ApplyUserSettings(settingsData);
             FindAnyObjectByType<CompanionInteractionDirector>()?.ApplyUserSettings(settingsData);
-            latestReply = $"已应用设置：男主 {settingsData.playerName}，女主 {settingsData.partnerName}";
+            latestReply = $"已应用设置：模型 {settingsData.ollamaModelName}，语音 {settingsData.speechBackend}";
             showSettings = false;
         }
 

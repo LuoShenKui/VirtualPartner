@@ -64,6 +64,8 @@ namespace VRDemo.VRM
         {
             modelPath = path;
             Debug.Log($"[VRM] Loading model: {path}");
+
+            UnloadModel();
             
             // 临时实现：使用 Resources.Load 加载
             // 正式版本需要 UniVRM 插件
@@ -243,10 +245,35 @@ namespace VRDemo.VRM
         {
             if (vrmInstance != null)
             {
-                Destroy(vrmInstance);
+                DisposeVrmRuntime(vrmInstance);
                 vrmInstance = null;
                 animator = null;
+                vrm10Instance = null;
                 Debug.Log("[VRM] Model unloaded");
+            }
+        }
+
+        private static void DisposeVrmRuntime(GameObject instance)
+        {
+            if (instance == null)
+            {
+                return;
+            }
+
+            var runtime = instance.GetComponent("RuntimeGltfInstance") as IDisposable;
+            if (runtime != null)
+            {
+                runtime.Dispose();
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(instance);
+            }
+            else
+            {
+                DestroyImmediate(instance);
             }
         }
         

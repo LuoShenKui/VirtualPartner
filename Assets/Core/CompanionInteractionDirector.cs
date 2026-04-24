@@ -14,8 +14,11 @@ namespace VRDemo.Core
         [SerializeField] private string partnerResourcePath = "Models/Characters/partner";
         [SerializeField] private float targetAvatarHeight = 1.58f;
         [SerializeField] private Vector3 standingLocalOffset = new Vector3(0f, 0.02f, 0f);
-        [SerializeField] private float footVisibleClearance = 0.05f;
-        [SerializeField] private float femaleMoveSpeed = 1.45f;
+        [SerializeField] private float footVisibleClearance = 0.28f;
+        [SerializeField] private float hipHeightRatio = 0.53f;
+        [SerializeField] private float minVisibleHeightRatio = 0.92f;
+        [SerializeField] private float femaleMoveSpeed = 2.6f;
+        [SerializeField] private float femaleLookSensitivity = 2.4f;
         [SerializeField] private Vector3 standingLocalEuler = new Vector3(0f, 0f, 0f);
         [SerializeField] private string femaleIdleControllerPath = "Assets/Kevin Iglesias/Human Animations/Unity Demo Scenes/Human Basic Motions/AnimatorControllers/HumanF@Idles.overrideController";
         [SerializeField] private string femaleTalkingControllerPath = "Assets/Kevin Iglesias/Human Animations/Unity Demo Scenes/Human Basic Motions/AnimatorControllers/HumanF@Talking.controller";
@@ -46,12 +49,28 @@ namespace VRDemo.Core
         private Light partnerKeyLight;
         private float motionUntilTime;
         private string activeMotion = "idle";
+        private CharacterController femaleController;
+        private float femalePitch;
+        private float groundHeight = 0.08f;
 
         private void OnEnable()
         {
             dialogueSystem = FindAnyObjectByType<DialogueSystem>();
             vrmController = GetComponent<VRMController>();
             partnerSpawn = transform.parent;
+            if (hipHeightRatio <= 0.01f)
+            {
+                hipHeightRatio = 0.53f;
+            }
+            if (minVisibleHeightRatio <= 0.01f)
+            {
+                minVisibleHeightRatio = 0.92f;
+            }
+            if (footVisibleClearance < 0.28f)
+            {
+                footVisibleClearance = 0.28f;
+            }
+            groundHeight = ResolveGroundHeightNearPartner();
             anchorTarget = FindAnyObjectByType<CompanionEyeTarget>()?.transform;
             idleSeed = Random.Range(0f, 10f);
             ApplyUserSettings(CompanionUserSettings.Load());
@@ -68,6 +87,8 @@ namespace VRDemo.Core
             }
 
             EnsurePartnerVisual();
+            EnsureFemaleController();
+            SnapPartnerSpawnToGround();
             ResolveAnimationControllers();
             EnsurePartnerKeyLight();
             SetIdleState();
@@ -92,7 +113,7 @@ namespace VRDemo.Core
             {
                 ResolveExistingAvatarRoot();
                 CachePlaceholderParts();
-                SnapImportedAvatarToFloor();
+                SnapImportedAvatarToFloor(true);
                 return;
             }
 
@@ -101,11 +122,12 @@ namespace VRDemo.Core
             {
                 var instance = Instantiate(prefab, transform);
                 importedAvatarRoot = instance.transform;
-                NormalizeImportedAvatar(importedAvatarRoot);
                 importedAnimator = importedAvatarRoot.GetComponentInChildren<Animator>();
+                DisableImportedRootMotion();
                 skinnedMeshes = importedAvatarRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                NormalizeImportedAvatar(importedAvatarRoot);
                 CachePlaceholderParts();
-                SnapImportedAvatarToFloor();
+                SnapImportedAvatarToFloor(true);
                 return;
             }
 
@@ -183,6 +205,7 @@ namespace VRDemo.Core
 
             importedAvatarRoot = candidate;
             importedAnimator = importedAvatarRoot.GetComponentInChildren<Animator>(true);
+            DisableImportedRootMotion();
             skinnedMeshes = importedAvatarRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true);
             importedBasePosition = importedAvatarRoot.localPosition;
             importedBaseRotation = importedAvatarRoot.localRotation;
@@ -194,6 +217,10 @@ namespace VRDemo.Core
             var t = Time.time + idleSeed;
             transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
             UpdateAnimationControllerState();
+            if (femaleMovementEnabled)
+            {
+                HandleFemaleLook();
+            }
             HandleFemaleMovement();
 
             if (importedAvatarRoot != null)
@@ -219,7 +246,7 @@ namespace VRDemo.Core
                 anchorTarget = FindAnyObjectByType<CompanionEyeTarget>()?.transform;
             }
 
-            if (anchorTarget != null && partnerSpawn != null)
+            if (!femaleMovementEnabled && anchorTarget != null && partnerSpawn != null)
             {
                 var lookTarget = new Vector3(anchorTarget.position.x, partnerSpawn.position.y, anchorTarget.position.z);
                 var lookDirection = lookTarget - partnerSpawn.position;
@@ -230,8 +257,35 @@ namespace VRDemo.Core
                 }
             }
 
+            SnapPartnerSpawnToGround();
             SnapImportedAvatarToFloor();
             UpdatePartnerKeyLight();
+        }
+
+        private void LateUpdate()
+        {
+            SnapPartnerSpawnToGround();
+            SnapImportedAvatarToFloor(true);
+        }
+
+        private void HandleFemaleLook()
+        {
+            if (partnerSpawn == null || Cursor.lockState != CursorLockMode.Locked)
+            {
+                return;
+            }
+
+            var yaw = Input.GetAxis("Mouse X") * femaleLookSensitivity;
+            var lookY = Input.GetAxis("Mouse Y") * femaleLookSensitivity;
+
+            partnerSpawn.Rotate(Vector3.up * yaw);
+            femalePitch = Mathf.Clamp(femalePitch - lookY, -35f, 45f);
+
+            var activeCamera = Camera.main;
+            if (activeCamera != null && activeCamera.transform.parent == partnerSpawn)
+            {
+                activeCamera.transform.localRotation = Quaternion.Euler(femalePitch, 0f, 0f);
+            }
         }
 
         private void HandleFemaleMovement()
@@ -256,8 +310,19 @@ namespace VRDemo.Core
             }
 
             var right = Vector3.Cross(Vector3.up, femaleForward.normalized);
-            var move = (right * input.x + femaleForward.normalized * input.z) * femaleMoveSpeed * Time.deltaTime;
-            partnerSpawn.position += move;
+            var move = (right * input.x + femaleForward.normalized * input.z) * femaleMoveSpeed;
+            move.y = 0f;
+
+            if (femaleController != null)
+            {
+                femaleController.Move(move * Time.deltaTime);
+            }
+            else
+            {
+                partnerSpawn.position += move * Time.deltaTime;
+            }
+
+            SnapPartnerSpawnToGround();
         }
 
         private void CachePlaceholderParts()
@@ -291,6 +356,16 @@ namespace VRDemo.Core
                 }
             }
 #endif
+        }
+
+        private void DisableImportedRootMotion()
+        {
+            if (importedAnimator == null)
+            {
+                return;
+            }
+
+            importedAnimator.applyRootMotion = false;
         }
 
         private void ApplyMouthShape(float weight)
@@ -367,10 +442,10 @@ namespace VRDemo.Core
             importedBasePosition = avatarRoot.localPosition;
             importedBaseRotation = avatarRoot.localRotation;
             importedBaseScale = avatarRoot.localScale;
-            SnapImportedAvatarToFloor();
+            SnapImportedAvatarToFloor(true);
         }
 
-        private void SnapImportedAvatarToFloor()
+        private void SnapImportedAvatarToFloor(bool allowLower = false)
         {
             if (importedAvatarRoot == null || partnerSpawn == null)
             {
@@ -378,14 +453,221 @@ namespace VRDemo.Core
             }
 
             var bounds = CalculateBounds(importedAvatarRoot);
-            var requiredOffset = GetDesiredFootWorldY() - bounds.min.y;
-            if (requiredOffset <= 0.0005f)
+            var requiredOffset = GetDesiredFootWorldY() - GetAvatarGroundProbeWorldY(bounds);
+            var minimumTopY = partnerSpawn.position.y + targetAvatarHeight * minVisibleHeightRatio;
+            var topRecoveryOffset = minimumTopY - bounds.max.y;
+            if (topRecoveryOffset > requiredOffset)
+            {
+                requiredOffset = topRecoveryOffset;
+            }
+
+            if ((!allowLower && requiredOffset <= 0.0005f) || Mathf.Abs(requiredOffset) <= 0.0005f)
             {
                 return;
             }
 
             importedAvatarRoot.localPosition += new Vector3(0f, requiredOffset, 0f);
             importedBasePosition = importedAvatarRoot.localPosition;
+        }
+
+        private float GetAvatarGroundProbeWorldY(Bounds bounds)
+        {
+            var probeY = bounds.min.y;
+
+            if (TryGetHumanoidFootWorldY(out var footY))
+            {
+                probeY = Mathf.Min(probeY, footY);
+            }
+
+            if (TryGetEstimatedFootFromHipsWorldY(out var estimatedFootY))
+            {
+                probeY = Mathf.Min(probeY, estimatedFootY);
+            }
+
+            return probeY;
+        }
+
+        private bool TryGetHumanoidFootWorldY(out float footY)
+        {
+            footY = 0f;
+            if (importedAnimator != null && importedAnimator.isHuman)
+            {
+                var leftFoot = importedAnimator.GetBoneTransform(HumanBodyBones.LeftFoot);
+                var rightFoot = importedAnimator.GetBoneTransform(HumanBodyBones.RightFoot);
+                var hasHumanoidFoot = false;
+
+                if (leftFoot != null)
+                {
+                    footY = leftFoot.position.y;
+                    hasHumanoidFoot = true;
+                }
+
+                if (rightFoot != null)
+                {
+                    footY = hasHumanoidFoot ? Mathf.Min(footY, rightFoot.position.y) : rightFoot.position.y;
+                    hasHumanoidFoot = true;
+                }
+
+                if (hasHumanoidFoot)
+                {
+                    return true;
+                }
+            }
+
+            var namedLeftFoot = FindBoneByName(importedAvatarRoot, "foot", "l");
+            var namedRightFoot = FindBoneByName(importedAvatarRoot, "foot", "r");
+            var hasFoot = false;
+
+            if (namedLeftFoot != null)
+            {
+                footY = namedLeftFoot.position.y;
+                hasFoot = true;
+            }
+
+            if (namedRightFoot != null)
+            {
+                footY = hasFoot ? Mathf.Min(footY, namedRightFoot.position.y) : namedRightFoot.position.y;
+                hasFoot = true;
+            }
+
+            return hasFoot;
+        }
+
+        private bool TryGetEstimatedFootFromHipsWorldY(out float estimatedFootY)
+        {
+            estimatedFootY = 0f;
+            Transform hips = null;
+            if (importedAnimator != null && importedAnimator.isHuman)
+            {
+                hips = importedAnimator.GetBoneTransform(HumanBodyBones.Hips);
+            }
+
+            hips ??= FindBoneByName(importedAvatarRoot, "hips", null);
+            hips ??= FindBoneByName(importedAvatarRoot, "pelvis", null);
+            if (hips == null)
+            {
+                return false;
+            }
+
+            estimatedFootY = hips.position.y - targetAvatarHeight * hipHeightRatio;
+            return true;
+        }
+
+        private static Transform FindBoneByName(Transform root, string requiredPart, string sidePart)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            requiredPart = requiredPart.ToLowerInvariant();
+            sidePart = sidePart?.ToLowerInvariant();
+            foreach (var child in root.GetComponentsInChildren<Transform>(true))
+            {
+                var name = child.name.ToLowerInvariant();
+                if (!name.Contains(requiredPart))
+                {
+                    continue;
+                }
+
+                if (sidePart != null && !name.Contains($"_{sidePart}_") && !name.Contains($".{sidePart}.") && !name.Contains($"{sidePart}_") && !name.Contains($"_{sidePart}") && !name.StartsWith(sidePart))
+                {
+                    continue;
+                }
+
+                return child;
+            }
+
+            return null;
+        }
+
+        private void EnsureFemaleController()
+        {
+            if (partnerSpawn == null)
+            {
+                return;
+            }
+
+            femaleController = partnerSpawn.GetComponent<CharacterController>();
+            if (femaleController == null)
+            {
+                femaleController = partnerSpawn.gameObject.AddComponent<CharacterController>();
+            }
+
+            femaleController.height = 1.58f;
+            femaleController.radius = 0.22f;
+            femaleController.center = new Vector3(0f, 0.79f, 0f);
+            femaleController.stepOffset = 0.2f;
+            femaleController.skinWidth = 0.03f;
+        }
+
+        private float ResolveGroundHeightNearPartner()
+        {
+            if (partnerSpawn == null)
+            {
+                return groundHeight;
+            }
+
+            var position = partnerSpawn.position;
+            var bestHeight = position.y;
+            var foundSurface = false;
+
+            foreach (var renderer in FindObjectsByType<Renderer>())
+            {
+                if (renderer == null || !renderer.gameObject.activeInHierarchy || renderer.transform.IsChildOf(partnerSpawn))
+                {
+                    continue;
+                }
+
+                var bounds = renderer.bounds;
+                if (bounds.size.y > 0.35f || bounds.size.x < 0.6f || bounds.size.z < 0.6f)
+                {
+                    continue;
+                }
+
+                if (position.x < bounds.min.x - 0.25f || position.x > bounds.max.x + 0.25f ||
+                    position.z < bounds.min.z - 0.25f || position.z > bounds.max.z + 0.25f)
+                {
+                    continue;
+                }
+
+                if (bounds.max.y > position.y + 2f)
+                {
+                    continue;
+                }
+
+                if (!foundSurface || bounds.max.y > bestHeight)
+                {
+                    bestHeight = bounds.max.y;
+                    foundSurface = true;
+                }
+            }
+
+            return foundSurface ? bestHeight + 0.01f : bestHeight;
+        }
+
+        private void SnapPartnerSpawnToGround()
+        {
+            if (partnerSpawn == null)
+            {
+                return;
+            }
+
+            if (Mathf.Abs(partnerSpawn.position.y - groundHeight) < 0.001f)
+            {
+                return;
+            }
+
+            if (femaleController != null)
+            {
+                femaleController.enabled = false;
+                partnerSpawn.position = new Vector3(partnerSpawn.position.x, groundHeight, partnerSpawn.position.z);
+                femaleController.enabled = true;
+            }
+            else
+            {
+                partnerSpawn.position = new Vector3(partnerSpawn.position.x, groundHeight, partnerSpawn.position.z);
+            }
         }
 
         private void SetIdleState()
@@ -442,6 +724,7 @@ namespace VRDemo.Core
                     break;
                 case "wave":
                 case "nod":
+                case "shake":
                 case "shy":
                 case "think":
                 case "talk":
@@ -485,6 +768,7 @@ namespace VRDemo.Core
             {
                 "wave" => Quaternion.Euler(0f, Mathf.Sin(t * 9f) * 3.5f, Mathf.Sin(t * 12f) * 2.5f),
                 "nod" => Quaternion.Euler(Mathf.Sin(t * 10f) * 4f, 0f, 0f),
+                "shake" => Quaternion.Euler(0f, Mathf.Sin(t * 10f) * 4f, 0f),
                 "shy" => Quaternion.Euler(5f + Mathf.Sin(t * 3f) * 1.5f, -4f, 0f),
                 "think" => Quaternion.Euler(0f, Mathf.Sin(t * 2.5f) * 2f, 0f),
                 "talk" => Quaternion.Euler(Mathf.Sin(t * 5f) * 1.5f, Mathf.Sin(t * 4f) * 1.2f, 0f),
@@ -542,7 +826,16 @@ namespace VRDemo.Core
                 return;
             }
 
-            partnerSpawn.position += direction.normalized * distance;
+            var move = direction.normalized * distance;
+            if (femaleController != null)
+            {
+                femaleController.Move(move);
+            }
+            else
+            {
+                partnerSpawn.position += move;
+            }
+            SnapPartnerSpawnToGround();
         }
 
         private void UpdateAnimationControllerState()
@@ -566,6 +859,7 @@ namespace VRDemo.Core
             }
 
             importedAnimator.runtimeAnimatorController = controller;
+            importedAnimator.applyRootMotion = false;
             importedAnimator.Rebind();
             importedAnimator.Update(0f);
             currentControllerState = stateName;
@@ -669,6 +963,14 @@ namespace VRDemo.Core
         public void SetFemaleMovementEnabled(bool value)
         {
             femaleMovementEnabled = value;
+            if (value)
+            {
+                var activeCamera = Camera.main;
+                femalePitch = activeCamera != null && activeCamera.transform.parent == partnerSpawn
+                    ? NormalizePitch(activeCamera.transform.localEulerAngles.x)
+                    : 0f;
+                SnapPartnerSpawnToGround();
+            }
         }
 
         private void OnSpeakingChanged(bool value)
@@ -678,6 +980,11 @@ namespace VRDemo.Core
             {
                 ApplyController(talkingController != null ? talkingController : idleController, "Talking");
             }
+        }
+
+        private static float NormalizePitch(float angle)
+        {
+            return angle > 180f ? angle - 360f : angle;
         }
     }
 

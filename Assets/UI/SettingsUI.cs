@@ -115,6 +115,7 @@ namespace VRDemo.UI
             
             var options = new List<string>();
             int currentIndex = 0;
+            var savedModelName = CompanionUserSettings.Load().ollamaModelName;
             
             // 已安装的模型优先
             var installedModels = modelManager.AvailableModels.FindAll(m => m.isInstalled);
@@ -125,8 +126,8 @@ namespace VRDemo.UI
                 string displayName = model.isRecommended ? $"⭐ {model.name}" : model.name;
                 options.Add($"{displayName} ({model.size})");
                 
-                if (modelManager.CurrentModel != null && 
-                    modelManager.CurrentModel.name == model.name)
+                if ((!string.IsNullOrWhiteSpace(savedModelName) && savedModelName == model.name) ||
+                    (modelManager.CurrentModel != null && modelManager.CurrentModel.name == model.name))
                 {
                     currentIndex = options.Count - 1;
                 }
@@ -199,7 +200,10 @@ namespace VRDemo.UI
             var dialogueSystem = FindAnyObjectByType<DialogueSystem>();
             if (dialogueSystem != null)
             {
-                dialogueSystem.SetModel(model.name);
+                var settings = CompanionUserSettings.Load();
+                settings.ollamaModelName = model.name;
+                CompanionUserSettings.Save(settings);
+                dialogueSystem.ApplyUserSettings(settings);
             }
         }
         
@@ -219,13 +223,13 @@ namespace VRDemo.UI
                     "2. 启动服务:\n" +
                     "   brew services start ollama\n\n" +
                     "3. 下载模型:\n" +
-                    "   ollama pull qwen3.5:2b\n\n" +
+                    "   ollama pull qwen3:4b\n\n" +
                     "4. 测试:\n" +
-                    "   ollama run qwen3.5:2b \"你好\"\n\n" +
+                    "   ollama run qwen3:4b \"你好\"\n\n" +
                     "=== 推荐模型 ===\n\n" +
-                    "⭐ qwen3.5:2b  - 最快 (~6 秒)\n" +
-                    "⭐ qwen3.5:4b  - 平衡 (~8 秒)\n" +
-                    "⭐ qwen3.5:9b  - 质量好 (~11 秒)";
+                    "⭐ qwen3:4b    - Mac 轻量推荐\n" +
+                    "⭐ qwen3:1.7b  - 更快但质量弱\n" +
+                    "⭐ qwen3:8b    - 更自然但更慢";
             }
         }
         
@@ -251,12 +255,13 @@ namespace VRDemo.UI
         {
             return modelName switch
             {
-                "qwen3.5:2b" => "~2.7 GB",
-                "qwen3.5:4b" => "~3.4 GB",
-                "qwen3.5:9b" => "~6.6 GB",
-                "phi3:mini" => "~2.2 GB",
-                "llama3.2:3b" => "~2.0 GB",
-                "gemma2:2b" => "~1.6 GB",
+                "qwen3:1.7b" => "~1.4 GB",
+                "qwen3:4b" => "~2.6 GB",
+                "qwen3:8b" => "~5.2 GB",
+                "qwen3:14b" => "~9 GB",
+                "gemma3:12b" => "~8 GB",
+                "llama3.1:8b" => "~4.9 GB",
+                "hermes3:8b" => "~4.7 GB",
                 _ => "未知"
             };
         }

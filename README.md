@@ -81,44 +81,7 @@ UniVRM 通过 Unity Package Manager 引用指定版本，不提交本地 `Packag
 
 如果 Package Manager 解析失败，关闭 Unity 后重新打开项目，让它重新 resolve。
 
-## Git 上传
 
-正常提交文件数约为 `124`，不是一万多个。
-
-推荐检查：
-
-```bash
-git add .
-git diff --cached --name-only | wc -l
-git status --short
-```
-
-如果曾经误把 `Library/`、Asset Store 包或缓存加进暂存区，执行：
-
-```bash
-git rm -r --cached .
-git add .
-git diff --cached --name-only | wc -l
-```
-
-不要上传这些目录：
-
-- `Library/`
-- `Temp/`
-- `UserSettings/`
-- `Assets/MinimalistBedroom/`
-- `Assets/Kevin Iglesias/`
-- `.vscode/`
-- `*.csproj`
-- `*.slnx`
-
-如果需要网页拖拽上传，用干净副本：
-
-```text
-/Users/zs/Projects/VirtualPartner_UPLOAD
-```
-
-它只包含 Git 应上传文件。
 
 ## 资产说明
 

@@ -30,12 +30,12 @@ namespace VRDemo.Core
         // 推荐模型列表 (按性能排序)
         private static readonly string[] RecommendedModels = new[]
         {
-            "qwen3.5:2b",      // 最快，中文好 ⭐⭐⭐⭐⭐
-            "qwen3.5:4b",      // 平衡 ⭐⭐⭐⭐
-            "qwen3.5:9b",      // 质量好 ⭐⭐⭐
-            "phi3:mini",       // 微软出品 ⭐⭐⭐
-            "llama3.2:3b",     // Meta 出品 ⭐⭐⭐
-            "gemma2:2b",       // Google 出品 ⭐⭐⭐
+            "qwen3:4b",        // Mac 轻量推荐
+            "qwen3:8b",        // 中文角色互动更稳
+            "qwen3:1.7b",      // 极轻量备选
+            "qwen3:14b",       // 质量更好
+            "gemma3:12b",      // 多语言对话备选
+            "llama3.1:8b",     // 长上下文备选
         };
         
         private void Awake()
@@ -51,6 +51,18 @@ namespace VRDemo.Core
         
         private void Start()
         {
+            var savedModelName = CompanionUserSettings.Load().ollamaModelName;
+            if (!string.IsNullOrWhiteSpace(savedModelName))
+            {
+                currentModel = new ModelInfo
+                {
+                    name = savedModelName,
+                    size = "已保存",
+                    isInstalled = true,
+                    isRecommended = IsRecommended(savedModelName)
+                };
+            }
+
             RefreshModels();
         }
         
@@ -82,7 +94,13 @@ namespace VRDemo.Core
                 }
                 
                 // 设置当前模型
-                if (currentModel == null || !currentModel.isInstalled)
+                var savedModelName = CompanionUserSettings.Load().ollamaModelName;
+                var savedInstalledModel = installedModels.Find(m => m.name == savedModelName);
+                if (savedInstalledModel != null)
+                {
+                    currentModel = savedInstalledModel;
+                }
+                else if (currentModel == null || !currentModel.isInstalled)
                 {
                     currentModel = installedModels.Count > 0 ? installedModels[0] : null;
                 }
@@ -143,9 +161,15 @@ namespace VRDemo.Core
                 OnModelChanged?.Invoke(model);
                 Debug.Log($"[Model] Switched to {model.name}");
                 
-                // 保存到 PlayerPrefs
-                PlayerPrefs.SetString("CurrentModel", model.name);
-                PlayerPrefs.Save();
+                var settings = CompanionUserSettings.Load();
+                settings.ollamaModelName = model.name;
+                CompanionUserSettings.Save(settings);
+
+                var dialogueSystem = FindAnyObjectByType<DialogueSystem>();
+                if (dialogueSystem != null)
+                {
+                    dialogueSystem.ApplyUserSettings(settings);
+                }
             }
             else
             {

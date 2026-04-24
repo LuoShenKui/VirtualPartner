@@ -207,12 +207,17 @@ namespace VRDemo.Core
             }
 
             var bounds = CalculateBounds(interior);
-            floor.position = new Vector3(bounds.center.x, bounds.min.y - 0.06f, bounds.center.z);
             collider.size = new Vector3(Mathf.Max(6f, bounds.size.x + 1.5f), 0.25f, Mathf.Max(6f, bounds.size.z + 1.5f));
+            floor.position = new Vector3(bounds.center.x, CalculateGroundHeight() - collider.size.y * 0.5f, bounds.center.z);
         }
 
         private float CalculateGroundHeight()
         {
+            if (TryCalculateFloorSurfaceHeight(out var floorHeight))
+            {
+                return floorHeight + 0.01f;
+            }
+
             var interior = FindDeepChildByName("Interior");
             if (interior == null)
             {
@@ -221,6 +226,34 @@ namespace VRDemo.Core
 
             var bounds = CalculateBounds(interior);
             return bounds.min.y + 0.08f;
+        }
+
+        private bool TryCalculateFloorSurfaceHeight(out float floorHeight)
+        {
+            floorHeight = 0f;
+            var foundSurface = false;
+
+            foreach (var renderer in FindObjectsByType<Renderer>())
+            {
+                if (renderer == null || !renderer.gameObject.activeInHierarchy || renderer.gameObject.scene != gameObject.scene)
+                {
+                    continue;
+                }
+
+                var bounds = renderer.bounds;
+                if (bounds.size.y > 0.35f || bounds.size.x < 1f || bounds.size.z < 1f || bounds.max.y > 0.35f)
+                {
+                    continue;
+                }
+
+                if (!foundSurface || bounds.max.y < floorHeight)
+                {
+                    floorHeight = bounds.max.y;
+                    foundSurface = true;
+                }
+            }
+
+            return foundSurface;
         }
 
         private static Vector3 ClampInsideInterior(Vector3 position, Bounds interiorBounds, float groundHeight, float margin)

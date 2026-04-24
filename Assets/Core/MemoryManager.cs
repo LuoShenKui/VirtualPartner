@@ -21,6 +21,12 @@ namespace VRDemo.Core
         /// </summary>
         public void AddMemory(string content, MemoryType type)
         {
+            if (type == MemoryType.CharacterReply && LooksLikeModelAnalysis(content))
+            {
+                Debug.LogWarning($"[Memory] Skipped model analysis text: {content}");
+                return;
+            }
+
             var entry = new MemoryEntry
             {
                 content = content,
@@ -38,6 +44,22 @@ namespace VRDemo.Core
             
             OnMemoriesUpdated?.Invoke(memories);
             Debug.Log($"[Memory] Added: {content}");
+        }
+
+        private static bool LooksLikeModelAnalysis(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return false;
+            }
+
+            return content.Contains("首先")
+                || content.Contains("用户指定")
+                || content.Contains("用户输入")
+                || content.Contains("我需要")
+                || content.Contains("根据要求")
+                || content.Contains("在模拟中")
+                || content.Length > 80;
         }
         
         /// <summary>

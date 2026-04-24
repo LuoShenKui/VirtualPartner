@@ -341,7 +341,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 300000}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 00000000000000000000000000000001, type: 0}
+  m_Script: {fileID: 11500000, guid: df6661bd16447467384a7a5bb92f4641, type: 0}
   m_Name: 
   m_EditorClassIdentifier: VRDemo.GameManager
 --- !u!1 &400000
@@ -384,7 +384,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 400000}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 00000000000000000000000000000002, type: 0}
+  m_Script: {fileID: 11500000, guid: 768e51e74e7584ff6b04399d68dc80b7, type: 0}
   m_Name: 
   m_EditorClassIdentifier: VRDemo.VRMController
 --- !u!1 &500000
