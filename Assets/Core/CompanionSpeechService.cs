@@ -65,7 +65,7 @@ namespace VRDemo.Core
 
         private async Task SpeakAsync(string text, string voiceName, bool notify, bool isPartner, CompanionUserSettingsData settings)
         {
-            text = DialogueSystem.BuildSpeechPreviewText(text);
+            text = DialogueSystem.BuildSpeechText(text);
             if (string.IsNullOrWhiteSpace(text))
             {
                 return;
@@ -208,7 +208,7 @@ namespace VRDemo.Core
 
                 using (var www = UnityWebRequest.Post(endpoint, form))
                 {
-                    www.timeout = 12;
+                    www.timeout = 30;
                     await www.SendWebRequest();
                     if (www.result != UnityWebRequest.Result.Success || www.downloadHandler.data == null || www.downloadHandler.data.Length == 0)
                     {

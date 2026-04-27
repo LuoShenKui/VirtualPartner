@@ -13,10 +13,7 @@ namespace VRDemo.Core
     {
         [SerializeField] private string partnerResourcePath = "Models/Characters/partner";
         [SerializeField] private float targetAvatarHeight = 1.58f;
-        [SerializeField] private Vector3 standingLocalOffset = new Vector3(0f, 0.02f, 0f);
-        [SerializeField] private float footVisibleClearance = 0.28f;
-        [SerializeField] private float hipHeightRatio = 0.53f;
-        [SerializeField] private float minVisibleHeightRatio = 0.92f;
+        [SerializeField] private Vector3 standingLocalOffset = Vector3.zero;
         [SerializeField] private float femaleMoveSpeed = 2.6f;
         [SerializeField] private float femaleLookSensitivity = 2.4f;
         [SerializeField] private Vector3 standingLocalEuler = new Vector3(0f, 0f, 0f);
@@ -52,24 +49,13 @@ namespace VRDemo.Core
         private CharacterController femaleController;
         private float femalePitch;
         private float groundHeight = 0.08f;
+        private bool loggedGrounding;
 
         private void OnEnable()
         {
             dialogueSystem = FindAnyObjectByType<DialogueSystem>();
             vrmController = GetComponent<VRMController>();
             partnerSpawn = transform.parent;
-            if (hipHeightRatio <= 0.01f)
-            {
-                hipHeightRatio = 0.53f;
-            }
-            if (minVisibleHeightRatio <= 0.01f)
-            {
-                minVisibleHeightRatio = 0.92f;
-            }
-            if (footVisibleClearance < 0.28f)
-            {
-                footVisibleClearance = 0.28f;
-            }
             groundHeight = ResolveGroundHeightNearPartner();
             anchorTarget = FindAnyObjectByType<CompanionEyeTarget>()?.transform;
             idleSeed = Random.Range(0f, 10f);
@@ -225,10 +211,9 @@ namespace VRDemo.Core
 
             if (importedAvatarRoot != null)
             {
-                var speakBob = isSpeaking ? Mathf.Abs(Mathf.Sin(t * 10f)) * 0.012f : 0f;
                 var motionOffset = GetMotionOffset(t);
                 var motionRotation = GetMotionRotation(t);
-                importedAvatarRoot.localPosition = importedBasePosition + new Vector3(0f, Mathf.Sin(t * 1.35f) * 0.008f + speakBob, 0f) + motionOffset;
+                importedAvatarRoot.localPosition = importedBasePosition + motionOffset;
                 importedAvatarRoot.localRotation = importedBaseRotation * motionRotation * Quaternion.Euler(Mathf.Sin(t * 0.75f) * 1.5f, 0f, 0f);
                 importedAvatarRoot.localScale = importedBaseScale;
                 ApplyMouthShape(isSpeaking ? Mathf.Abs(Mathf.Sin(t * 12f)) * 70f : 0f);
@@ -454,13 +439,6 @@ namespace VRDemo.Core
 
             var bounds = CalculateBounds(importedAvatarRoot);
             var requiredOffset = GetDesiredFootWorldY() - GetAvatarGroundProbeWorldY(bounds);
-            var minimumTopY = partnerSpawn.position.y + targetAvatarHeight * minVisibleHeightRatio;
-            var topRecoveryOffset = minimumTopY - bounds.max.y;
-            if (topRecoveryOffset > requiredOffset)
-            {
-                requiredOffset = topRecoveryOffset;
-            }
-
             if ((!allowLower && requiredOffset <= 0.0005f) || Mathf.Abs(requiredOffset) <= 0.0005f)
             {
                 return;
@@ -468,117 +446,16 @@ namespace VRDemo.Core
 
             importedAvatarRoot.localPosition += new Vector3(0f, requiredOffset, 0f);
             importedBasePosition = importedAvatarRoot.localPosition;
+            if (!loggedGrounding)
+            {
+                loggedGrounding = true;
+                Debug.Log($"[CompanionGrounding] Female avatar grounded: desired={GetDesiredFootWorldY():F3}, boundsMin={bounds.min.y:F3}, offset={requiredOffset:F3}");
+            }
         }
 
         private float GetAvatarGroundProbeWorldY(Bounds bounds)
         {
-            var probeY = bounds.min.y;
-
-            if (TryGetHumanoidFootWorldY(out var footY))
-            {
-                probeY = Mathf.Min(probeY, footY);
-            }
-
-            if (TryGetEstimatedFootFromHipsWorldY(out var estimatedFootY))
-            {
-                probeY = Mathf.Min(probeY, estimatedFootY);
-            }
-
-            return probeY;
-        }
-
-        private bool TryGetHumanoidFootWorldY(out float footY)
-        {
-            footY = 0f;
-            if (importedAnimator != null && importedAnimator.isHuman)
-            {
-                var leftFoot = importedAnimator.GetBoneTransform(HumanBodyBones.LeftFoot);
-                var rightFoot = importedAnimator.GetBoneTransform(HumanBodyBones.RightFoot);
-                var hasHumanoidFoot = false;
-
-                if (leftFoot != null)
-                {
-                    footY = leftFoot.position.y;
-                    hasHumanoidFoot = true;
-                }
-
-                if (rightFoot != null)
-                {
-                    footY = hasHumanoidFoot ? Mathf.Min(footY, rightFoot.position.y) : rightFoot.position.y;
-                    hasHumanoidFoot = true;
-                }
-
-                if (hasHumanoidFoot)
-                {
-                    return true;
-                }
-            }
-
-            var namedLeftFoot = FindBoneByName(importedAvatarRoot, "foot", "l");
-            var namedRightFoot = FindBoneByName(importedAvatarRoot, "foot", "r");
-            var hasFoot = false;
-
-            if (namedLeftFoot != null)
-            {
-                footY = namedLeftFoot.position.y;
-                hasFoot = true;
-            }
-
-            if (namedRightFoot != null)
-            {
-                footY = hasFoot ? Mathf.Min(footY, namedRightFoot.position.y) : namedRightFoot.position.y;
-                hasFoot = true;
-            }
-
-            return hasFoot;
-        }
-
-        private bool TryGetEstimatedFootFromHipsWorldY(out float estimatedFootY)
-        {
-            estimatedFootY = 0f;
-            Transform hips = null;
-            if (importedAnimator != null && importedAnimator.isHuman)
-            {
-                hips = importedAnimator.GetBoneTransform(HumanBodyBones.Hips);
-            }
-
-            hips ??= FindBoneByName(importedAvatarRoot, "hips", null);
-            hips ??= FindBoneByName(importedAvatarRoot, "pelvis", null);
-            if (hips == null)
-            {
-                return false;
-            }
-
-            estimatedFootY = hips.position.y - targetAvatarHeight * hipHeightRatio;
-            return true;
-        }
-
-        private static Transform FindBoneByName(Transform root, string requiredPart, string sidePart)
-        {
-            if (root == null)
-            {
-                return null;
-            }
-
-            requiredPart = requiredPart.ToLowerInvariant();
-            sidePart = sidePart?.ToLowerInvariant();
-            foreach (var child in root.GetComponentsInChildren<Transform>(true))
-            {
-                var name = child.name.ToLowerInvariant();
-                if (!name.Contains(requiredPart))
-                {
-                    continue;
-                }
-
-                if (sidePart != null && !name.Contains($"_{sidePart}_") && !name.Contains($".{sidePart}.") && !name.Contains($"{sidePart}_") && !name.Contains($"_{sidePart}") && !name.StartsWith(sidePart))
-                {
-                    continue;
-                }
-
-                return child;
-            }
-
-            return null;
+            return bounds.min.y;
         }
 
         private void EnsureFemaleController()
@@ -749,10 +626,10 @@ namespace VRDemo.Core
 
             return activeMotion switch
             {
-                "wave" => new Vector3(Mathf.Sin(t * 10f) * 0.012f, Mathf.Abs(Mathf.Sin(t * 8f)) * 0.018f, 0f),
+                "wave" => new Vector3(Mathf.Sin(t * 10f) * 0.012f, 0f, 0f),
                 "shy" => new Vector3(0f, -Mathf.Abs(Mathf.Sin(t * 3.5f)) * 0.012f, 0f),
-                "think" => new Vector3(0f, Mathf.Sin(t * 2f) * 0.006f, 0f),
-                "talk" => new Vector3(Mathf.Sin(t * 6f) * 0.006f, Mathf.Abs(Mathf.Sin(t * 5f)) * 0.008f, 0f),
+                "think" => Vector3.zero,
+                "talk" => new Vector3(Mathf.Sin(t * 6f) * 0.006f, 0f, 0f),
                 _ => Vector3.zero
             };
         }
@@ -781,8 +658,8 @@ namespace VRDemo.Core
         private float GetDesiredFootWorldY()
         {
             return partnerSpawn != null
-                ? partnerSpawn.position.y + standingLocalOffset.y + footVisibleClearance
-                : transform.position.y + standingLocalOffset.y + footVisibleClearance;
+                ? partnerSpawn.position.y
+                : transform.position.y;
         }
 
         private void EnsurePartnerKeyLight()

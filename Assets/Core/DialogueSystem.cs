@@ -506,38 +506,28 @@ JSON:";
             text = CleanModelOutput(text);
             text = Regex.Replace(text, "[（(][^（）()]*[）)]", "");
             text = Regex.Replace(text, "^\\s*(女主|角色|回复|text)\\s*[:：]\\s*", "", RegexOptions.IgnoreCase);
+            text = StripActionNarrationPrefix(text);
+            text = Regex.Replace(text, "^\\s*(?:说|问|回答|轻声说|小声说)\\s*[:：]\\s*", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, "\\s+", " ").Trim();
             text = text.Trim('"', '\'', '“', '”', '‘', '’');
             return text.Trim();
         }
 
-        public static string BuildSpeechPreviewText(string text, int maxLength = 20)
+        private static string StripActionNarrationPrefix(string text)
         {
-            text = SanitizeSpokenText(text);
             if (string.IsNullOrWhiteSpace(text))
             {
                 return "";
             }
 
-            if (text.Length <= maxLength)
-            {
-                return text;
-            }
+            text = Regex.Replace(text, "^\\s*[^：:。！？!?]{0,24}(?:说|问|回答|轻声说|小声说)\\s*[:：]\\s*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "^\\s*(?:笑了?一下|点了?点头|摇了?摇头|挥了?挥手|脸红|害羞|看向[^，,。！？!?]{0,12})(?:[，,]\\s*)?", "", RegexOptions.IgnoreCase);
+            return text;
+        }
 
-            for (var i = maxLength - 1; i >= 0 && i < text.Length; i--)
-            {
-                var ch = text[i];
-                if (ch == '。' || ch == '！' || ch == '？' || ch == '!' || ch == '?' || ch == '；' || ch == ';')
-                {
-                    var candidate = text.Substring(0, i + 1).Trim();
-                    if (!string.IsNullOrWhiteSpace(candidate))
-                    {
-                        return candidate;
-                    }
-                }
-            }
-
-            return text.Substring(0, maxLength).Trim();
+        public static string BuildSpeechText(string text)
+        {
+            return SanitizeSpokenText(text);
         }
 
         private bool IsRepeating(string reply, string userInput)

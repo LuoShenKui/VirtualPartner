@@ -55,6 +55,7 @@ namespace VRDemo.UI
         private GUIStyle crosshairStyle;
         private GUIStyle smallButtonStyle;
         private Vector2 settingsScroll;
+        private bool requestInputFocus;
 
         private void OnEnable()
         {
@@ -147,6 +148,11 @@ namespace VRDemo.UI
             GUI.SetNextControlName("CompanionInput");
             var previousInput = customInput;
             customInput = GUILayout.TextArea(customInput, inputStyle, GUILayout.Height(80));
+            if (requestInputFocus)
+            {
+                GUI.FocusControl("CompanionInput");
+                requestInputFocus = false;
+            }
             if (customInput != previousInput)
             {
                 lastInputEditTime = Time.time;
@@ -329,12 +335,13 @@ namespace VRDemo.UI
             if (evt != null && evt.type == EventType.KeyDown && (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter))
             {
                 SubmitCustomInput();
-                evt.Use();
             }
 
-            if (Input.GetKeyDown(KeyCode.T))
+            if (evt != null && evt.type == EventType.KeyDown && evt.keyCode == KeyCode.T)
             {
-                GUI.FocusControl(GUI.GetNameOfFocusedControl() == "CompanionInput" ? string.Empty : "CompanionInput");
+                requestInputFocus = true;
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
             }
         }
 
