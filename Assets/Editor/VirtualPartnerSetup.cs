@@ -145,7 +145,11 @@ public class VirtualPartnerSetup : EditorWindow
         GameObject canvasObj = new GameObject("Canvas");
         Canvas canvas = canvasObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvasObj.AddComponent<CanvasScaler>();
+        var scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
         canvasObj.AddComponent<GraphicRaycaster>();
         
         RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
@@ -164,6 +168,13 @@ public class VirtualPartnerSetup : EditorWindow
     
     private static GameObject CreateInputField(GameObject parent)
     {
+        var fontAsset = TMP_Settings.defaultFontAsset;
+        if (fontAsset == null)
+        {
+            Debug.LogWarning("⚠ TMP 默认字体未配置，跳过测试输入框创建，避免生成损坏的 TMP 组件");
+            return null;
+        }
+
         GameObject inputObj = new GameObject("InputField");
         inputObj.transform.SetParent(parent.transform, false);
         
@@ -175,10 +186,56 @@ public class VirtualPartnerSetup : EditorWindow
         
         // 添加图片背景
         Image img = inputObj.AddComponent<Image>();
-        img.color = Color.white;
+        img.color = new Color(1f, 1f, 1f, 0.92f);
         
         // 添加 TMP 输入框
         var tmpInput = inputObj.AddComponent<TMPro.TMP_InputField>();
+        tmpInput.lineType = TMP_InputField.LineType.SingleLine;
+        tmpInput.pointSize = 24f;
+        tmpInput.customCaretColor = true;
+        tmpInput.caretColor = Color.black;
+        tmpInput.selectionColor = new Color(0.2f, 0.45f, 0.95f, 0.35f);
+
+        var textViewport = new GameObject("Text Area", typeof(RectTransform), typeof(RectMask2D));
+        textViewport.transform.SetParent(inputObj.transform, false);
+        var viewportRect = textViewport.GetComponent<RectTransform>();
+        viewportRect.anchorMin = Vector2.zero;
+        viewportRect.anchorMax = Vector2.one;
+        viewportRect.offsetMin = new Vector2(16f, 8f);
+        viewportRect.offsetMax = new Vector2(-16f, -8f);
+
+        var textObj = new GameObject("Text", typeof(RectTransform));
+        textObj.transform.SetParent(textViewport.transform, false);
+        var textRect = textObj.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+        var inputText = textObj.AddComponent<TextMeshProUGUI>();
+        inputText.font = fontAsset;
+        inputText.fontSize = 24f;
+        inputText.color = Color.black;
+        inputText.textWrappingMode = TextWrappingModes.NoWrap;
+        inputText.alignment = TextAlignmentOptions.MidlineLeft;
+
+        var placeholderObj = new GameObject("Placeholder", typeof(RectTransform));
+        placeholderObj.transform.SetParent(textViewport.transform, false);
+        var placeholderRect = placeholderObj.GetComponent<RectTransform>();
+        placeholderRect.anchorMin = Vector2.zero;
+        placeholderRect.anchorMax = Vector2.one;
+        placeholderRect.offsetMin = Vector2.zero;
+        placeholderRect.offsetMax = Vector2.zero;
+        var placeholder = placeholderObj.AddComponent<TextMeshProUGUI>();
+        placeholder.font = fontAsset;
+        placeholder.fontSize = 24f;
+        placeholder.text = "输入消息后按 Enter";
+        placeholder.color = new Color(0f, 0f, 0f, 0.45f);
+        placeholder.textWrappingMode = TextWrappingModes.NoWrap;
+        placeholder.alignment = TextAlignmentOptions.MidlineLeft;
+
+        tmpInput.textViewport = viewportRect;
+        tmpInput.textComponent = inputText;
+        tmpInput.placeholder = placeholder;
         
         Debug.Log("  - 输入框已创建");
         return inputObj;
@@ -186,6 +243,13 @@ public class VirtualPartnerSetup : EditorWindow
     
     private static GameObject CreateResponseText(GameObject parent)
     {
+        var fontAsset = TMP_Settings.defaultFontAsset;
+        if (fontAsset == null)
+        {
+            Debug.LogWarning("⚠ TMP 默认字体未配置，跳过测试回复文本创建，避免生成损坏的 TMP 组件");
+            return null;
+        }
+
         GameObject textObj = new GameObject("ResponseText");
         textObj.transform.SetParent(parent.transform, false);
         
@@ -197,6 +261,7 @@ public class VirtualPartnerSetup : EditorWindow
         
         // 添加 TMP 文本
         var tmpText = textObj.AddComponent<TMPro.TextMeshProUGUI>();
+        tmpText.font = fontAsset;
         tmpText.text = "点击输入框，输入消息后按 Enter 发送...";
         tmpText.fontSize = 24;
         tmpText.alignment = TextAlignmentOptions.Center;

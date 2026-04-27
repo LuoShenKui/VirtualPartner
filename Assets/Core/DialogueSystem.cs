@@ -80,7 +80,7 @@ namespace VRDemo.Core
         /// </summary>
         public async Task SendAsync(string userInput)
         {
-            await SendInternalAsync(userInput, false, true, false, true, ResponseSpeaker.Partner);
+            await SendInternalAsync(userInput, false, false, false, true, ResponseSpeaker.Partner);
         }
 
         public async Task SendProactiveAsync(string sceneInstruction)
@@ -90,7 +90,7 @@ namespace VRDemo.Core
 
         public async Task SendFemalePerspectiveAsync(string femaleInput)
         {
-            await SendInternalAsync(femaleInput, false, true, true, true, ResponseSpeaker.Player);
+            await SendInternalAsync(femaleInput, false, false, true, true, ResponseSpeaker.Player);
         }
 
         private async Task SendInternalAsync(
@@ -119,37 +119,37 @@ namespace VRDemo.Core
                 OnStatusChanged?.Invoke("Ollama 正在回复...");
                 if (speakInput)
                 {
-                    var speech = FindAnyObjectByType<CompanionSpeechService>();
+                    var inputSpeechService = FindAnyObjectByType<CompanionSpeechService>();
                     if (inputIsPartner)
                     {
-                        speech?.SpeakPartner(userInput);
+                        inputSpeechService?.SpeakPartner(userInput);
                     }
                     else
                     {
-                        speech?.SpeakPlayer(userInput);
+                        inputSpeechService?.SpeakPlayer(userInput);
                     }
                 }
 
                 rawResponse = await CallOllamaFastAsync(prompt);
 
                 dialogueResponse = ParseResponse(rawResponse, userInput);
+                var replySpeechService = dialogueResponse.shouldSpeak ? FindAnyObjectByType<CompanionSpeechService>() : null;
+                if (replySpeechService != null)
+                {
+                    if (responseSpeaker == ResponseSpeaker.Partner)
+                    {
+                        replySpeechService.SpeakPartner(dialogueResponse.text);
+                    }
+                    else
+                    {
+                        replySpeechService.SpeakPlayer(dialogueResponse.text);
+                    }
+                }
+
                 OnResponseReceived?.Invoke(dialogueResponse.text);
                 if (responseSpeaker == ResponseSpeaker.Partner)
                 {
                     OnDialogueResolved?.Invoke(dialogueResponse);
-                }
-
-                if (dialogueResponse.shouldSpeak)
-                {
-                    var speech = FindAnyObjectByType<CompanionSpeechService>();
-                    if (responseSpeaker == ResponseSpeaker.Partner)
-                    {
-                        speech?.SpeakPartner(dialogueResponse.text);
-                    }
-                    else
-                    {
-                        speech?.SpeakPlayer(dialogueResponse.text);
-                    }
                 }
                 
                 if (rememberUserInput)
@@ -509,6 +509,35 @@ JSON:";
             text = Regex.Replace(text, "\\s+", " ").Trim();
             text = text.Trim('"', '\'', '“', '”', '‘', '’');
             return text.Trim();
+        }
+
+        public static string BuildSpeechPreviewText(string text, int maxLength = 20)
+        {
+            text = SanitizeSpokenText(text);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return "";
+            }
+
+            if (text.Length <= maxLength)
+            {
+                return text;
+            }
+
+            for (var i = maxLength - 1; i >= 0 && i < text.Length; i--)
+            {
+                var ch = text[i];
+                if (ch == '。' || ch == '！' || ch == '？' || ch == '!' || ch == '?' || ch == '；' || ch == ';')
+                {
+                    var candidate = text.Substring(0, i + 1).Trim();
+                    if (!string.IsNullOrWhiteSpace(candidate))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            return text.Substring(0, maxLength).Trim();
         }
 
         private bool IsRepeating(string reply, string userInput)

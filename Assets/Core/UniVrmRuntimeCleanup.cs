@@ -9,6 +9,7 @@ namespace VRDemo.Core
     public sealed class UniVrmRuntimeCleanup : MonoBehaviour
     {
         private static UniVrmRuntimeCleanup instance;
+        private static bool released;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void EnsureInstalled()
@@ -30,20 +31,43 @@ namespace VRDemo.Core
 
         private void OnDestroy()
         {
-            ReleaseFastSpringBoneService();
+            if (!Application.isPlaying)
+            {
+                ReleaseFastSpringBoneService();
+            }
         }
 
         private static void ReleaseFastSpringBoneService()
         {
+            if (released)
+            {
+                return;
+            }
+
             var type = Type.GetType("UniVRM10.FastSpringBones.FastSpringBoneService, FastSpringBone10");
             var free = type?.GetMethod("Free", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
             try
             {
-                free?.Invoke(null, null);
+                if (free == null)
+                {
+                    return;
+                }
+
+                free.Invoke(null, null);
+                released = true;
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[VRM] Could not release FastSpringBoneService: {ex.Message}");
+                var root = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null
+                    ? tie.InnerException
+                    : ex;
+                if (root is NullReferenceException)
+                {
+                    released = true;
+                    return;
+                }
+
+                Debug.LogWarning($"[VRM] Could not release FastSpringBoneService: {root.GetType().Name}: {root.Message}");
             }
         }
     }

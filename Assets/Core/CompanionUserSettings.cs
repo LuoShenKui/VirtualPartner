@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using UnityEngine;
 
 namespace VRDemo.Core
@@ -16,6 +17,9 @@ namespace VRDemo.Core
         public string speechBackend = "cosyvoice";
         public string cosyVoiceUrl = "http://localhost:50000";
         public string cosyVoiceMode = "sft";
+        public bool autoStartSpeechService = true;
+        public string speechServiceWorkingDirectory = "";
+        public string speechServiceStartCommand = "";
         public string playerVoiceName = "中文男";
         public string partnerVoiceName = "中文女";
         public bool speakPlayerVoice = true;
@@ -27,6 +31,11 @@ namespace VRDemo.Core
     public static class CompanionUserSettings
     {
         private const string StorageKey = "VRDemo.CompanionUserSettings";
+        private const string DefaultCosyVoiceRoot = "/Users/zs/Projects/CosyVoice";
+        private const string LegacyCosyVoiceModelDir = "/Users/zs/Projects/CosyVoice/pretrained_models/CosyVoice-300M";
+        private const string LegacyCosyVoiceStartCommand = "/Users/zs/Projects/CosyVoice/.venv/bin/python runtime/python/fastapi/server.py --port 50000 --model_dir /Users/zs/Projects/CosyVoice/pretrained_models/CosyVoice-300M";
+        private const string DefaultCosyVoiceModelDir = "/Users/zs/Projects/CosyVoice/pretrained_models/CosyVoice-300M-SFT";
+        private const string DefaultCosyVoiceStartCommand = "/Users/zs/Projects/CosyVoice/.venv/bin/python runtime/python/fastapi/server.py --port 50000 --model_dir /Users/zs/Projects/CosyVoice/pretrained_models/CosyVoice-300M-SFT";
 
         public static CompanionUserSettingsData Load()
         {
@@ -137,15 +146,18 @@ namespace VRDemo.Core
                     settings.cosyVoiceMode = "sft";
                 }
 
-                if (string.IsNullOrWhiteSpace(settings.playerVoiceName) || settings.playerVoiceName.Contains("Neural"))
+                if (string.IsNullOrWhiteSpace(settings.speechServiceWorkingDirectory))
                 {
-                    settings.playerVoiceName = "中文男";
+                    settings.speechServiceWorkingDirectory = Directory.Exists(DefaultCosyVoiceRoot) ? DefaultCosyVoiceRoot : string.Empty;
                 }
 
-                if (string.IsNullOrWhiteSpace(settings.partnerVoiceName) || settings.partnerVoiceName.Contains("Neural"))
+                if (string.IsNullOrWhiteSpace(settings.speechServiceStartCommand))
                 {
-                    settings.partnerVoiceName = "中文女";
+                    settings.speechServiceStartCommand = HasDefaultCosyVoiceInstall() ? DefaultCosyVoiceStartCommand : string.Empty;
                 }
+
+                settings.playerVoiceName = NormalizeCosyVoiceSpeaker(settings.playerVoiceName, false);
+                settings.partnerVoiceName = NormalizeCosyVoiceSpeaker(settings.partnerVoiceName, true);
 
                 settings.settingsVersion = 5;
             }
@@ -169,8 +181,24 @@ namespace VRDemo.Core
                 : settings.speechBackend;
             settings.cosyVoiceUrl = string.IsNullOrWhiteSpace(settings.cosyVoiceUrl) ? "http://localhost:50000" : settings.cosyVoiceUrl.TrimEnd('/');
             settings.cosyVoiceMode = string.IsNullOrWhiteSpace(settings.cosyVoiceMode) ? "sft" : settings.cosyVoiceMode;
-            settings.playerVoiceName = string.IsNullOrWhiteSpace(settings.playerVoiceName) ? "中文男" : settings.playerVoiceName;
-            settings.partnerVoiceName = string.IsNullOrWhiteSpace(settings.partnerVoiceName) ? "中文女" : settings.partnerVoiceName;
+            settings.speechServiceWorkingDirectory = string.IsNullOrWhiteSpace(settings.speechServiceWorkingDirectory)
+                ? (Directory.Exists(DefaultCosyVoiceRoot) ? DefaultCosyVoiceRoot : string.Empty)
+                : settings.speechServiceWorkingDirectory.Trim();
+            settings.speechServiceStartCommand = string.IsNullOrWhiteSpace(settings.speechServiceStartCommand)
+                ? (HasDefaultCosyVoiceInstall() ? DefaultCosyVoiceStartCommand : string.Empty)
+                : settings.speechServiceStartCommand.Trim();
+
+            if (string.Equals(settings.speechServiceStartCommand, LegacyCosyVoiceStartCommand, StringComparison.Ordinal))
+            {
+                settings.speechServiceStartCommand = HasDefaultCosyVoiceInstall() ? DefaultCosyVoiceStartCommand : string.Empty;
+            }
+            else if (!string.IsNullOrWhiteSpace(settings.speechServiceStartCommand)
+                && settings.speechServiceStartCommand.Contains(LegacyCosyVoiceModelDir, StringComparison.Ordinal))
+            {
+                settings.speechServiceStartCommand = settings.speechServiceStartCommand.Replace(LegacyCosyVoiceModelDir, DefaultCosyVoiceModelDir, StringComparison.Ordinal);
+            }
+            settings.playerVoiceName = NormalizeCosyVoiceSpeaker(settings.playerVoiceName, false);
+            settings.partnerVoiceName = NormalizeCosyVoiceSpeaker(settings.partnerVoiceName, true);
             settings.partnerResourcePath = string.IsNullOrWhiteSpace(settings.partnerResourcePath) ? "Models/Characters/partner" : settings.partnerResourcePath;
             settings.partnerModelAssetPath = string.IsNullOrWhiteSpace(settings.partnerModelAssetPath)
                 ? "Assets/Resources/Models/Characters/partner.vrm"
@@ -179,10 +207,44 @@ namespace VRDemo.Core
             return settings;
         }
 
+        private static bool HasDefaultCosyVoiceInstall()
+        {
+            return File.Exists("/Users/zs/Projects/CosyVoice/.venv/bin/python")
+                && File.Exists("/Users/zs/Projects/CosyVoice/runtime/python/fastapi/server.py")
+                && Directory.Exists(DefaultCosyVoiceModelDir);
+        }
+
         private static bool IsDeprecatedQwen35(string modelName)
         {
             return !string.IsNullOrWhiteSpace(modelName)
                 && modelName.Trim().StartsWith("qwen3.5", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeCosyVoiceSpeaker(string voiceName, bool isPartner)
+        {
+            if (string.IsNullOrWhiteSpace(voiceName))
+            {
+                return isPartner ? "中文女" : "中文男";
+            }
+
+            var value = voiceName.Trim();
+            var lower = value.ToLowerInvariant();
+            if (value.Contains("中文男", StringComparison.Ordinal) || value.Contains("男", StringComparison.Ordinal) || lower.Contains("male") || lower.Contains("reed") || lower.Contains("eddy"))
+            {
+                return "中文男";
+            }
+
+            if (value.Contains("中文女", StringComparison.Ordinal) || value.Contains("女", StringComparison.Ordinal) || lower.Contains("female") || lower.Contains("sandy") || lower.Contains("tingting") || lower.Contains("xiaoxiao"))
+            {
+                return "中文女";
+            }
+
+            if (value.Contains("Neural", StringComparison.OrdinalIgnoreCase))
+            {
+                return isPartner ? "中文女" : "中文男";
+            }
+
+            return value;
         }
     }
 }

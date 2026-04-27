@@ -236,12 +236,21 @@ namespace VRDemo.UI
 
             GUILayout.Label("语音后端", bodyStyle);
             settingsData.speechBackend = GUILayout.TextField(settingsData.speechBackend ?? string.Empty, inputStyle, GUILayout.Height(30));
-            GUILayout.Label("填写 cosyvoice。需要先启动本地 CosyVoice 服务，否则不播放语音。", bodyStyle);
+            GUILayout.Label("填写 cosyvoice。已安装并开启自动启动时，进入游戏会自动拉起本地 CosyVoice 服务。", bodyStyle);
             GUILayout.Space(6);
 
             GUILayout.Label("CosyVoice 服务地址", bodyStyle);
             settingsData.cosyVoiceUrl = GUILayout.TextField(settingsData.cosyVoiceUrl ?? string.Empty, inputStyle, GUILayout.Height(30));
             GUILayout.Label("默认：http://localhost:50000，模式默认 sft，女主 voice 可填 中文女。", bodyStyle);
+            GUILayout.Space(6);
+
+            GUILayout.Label("语音服务自动启动", bodyStyle);
+            settingsData.autoStartSpeechService = GUILayout.Toggle(settingsData.autoStartSpeechService, "进入游戏时自动拉起语音服务");
+            GUILayout.Label("语音服务工作目录", bodyStyle);
+            settingsData.speechServiceWorkingDirectory = GUILayout.TextField(settingsData.speechServiceWorkingDirectory ?? string.Empty, inputStyle, GUILayout.Height(30));
+            GUILayout.Label("语音服务启动命令", bodyStyle);
+            settingsData.speechServiceStartCommand = GUILayout.TextField(settingsData.speechServiceStartCommand ?? string.Empty, inputStyle, GUILayout.Height(30));
+            GUILayout.Label("示例：source scripts/venv/bin/activate && python server.py --port 50000 --model_dir pretrained_models/CosyVoice2-0.5B", bodyStyle);
             GUILayout.Space(6);
 
             GUILayout.Label("女主语音名称", bodyStyle);
@@ -418,9 +427,12 @@ namespace VRDemo.UI
             settingsData.speechBackend = string.IsNullOrWhiteSpace(settingsData.speechBackend) ? "cosyvoice" : settingsData.speechBackend.Trim();
             settingsData.cosyVoiceUrl = string.IsNullOrWhiteSpace(settingsData.cosyVoiceUrl) ? "http://localhost:50000" : settingsData.cosyVoiceUrl.Trim().TrimEnd('/');
             settingsData.cosyVoiceMode = string.IsNullOrWhiteSpace(settingsData.cosyVoiceMode) ? "sft" : settingsData.cosyVoiceMode.Trim();
+            settingsData.speechServiceWorkingDirectory = settingsData.speechServiceWorkingDirectory?.Trim() ?? string.Empty;
+            settingsData.speechServiceStartCommand = settingsData.speechServiceStartCommand?.Trim() ?? string.Empty;
 
             CompanionUserSettings.Save(settingsData);
             FindAnyObjectByType<DialogueSystem>()?.ApplyUserSettings(settingsData);
+            FindAnyObjectByType<CompanionSpeechService>()?.ApplyUserSettings(settingsData);
             FindAnyObjectByType<CompanionInteractionDirector>()?.ApplyUserSettings(settingsData);
             latestReply = $"已应用设置：模型 {settingsData.ollamaModelName}，语音 {settingsData.speechBackend}";
             showSettings = false;
